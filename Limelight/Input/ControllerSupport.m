@@ -1073,6 +1073,11 @@ static const double MOUSE_SPEED_DIVISOR = 1.25;
     return _controllers.count;
 }
 
+-(void) sendKeyboardEvent:(short)keyCode down:(BOOL)down
+{
+    LiSendKeyboardEvent(keyCode, down ? KEY_ACTION_DOWN : KEY_ACTION_UP, 0);
+}
+
 -(id) initWithConfig:(StreamConfiguration*)streamConfig delegate:(id<ControllerSupportDelegate>)delegate
 {
     self = [super init];

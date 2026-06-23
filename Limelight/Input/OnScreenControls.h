@@ -22,7 +22,11 @@ typedef NS_ENUM(NSInteger, OnScreenControlsLevel) {
     // Internal levels selected by ControllerSupport
     OnScreenControlsLevelAutoGCGamepad,
     OnScreenControlsLevelAutoGCExtendedGamepad,
-    OnScreenControlsLevelAutoGCExtendedGamepadWithStickButtons
+    OnScreenControlsLevelAutoGCExtendedGamepadWithStickButtons,
+
+    // Keyboard-mapped custom controls: a single left analog stick plus a
+    // grid of buttons that send keyboard keys (default Q W E R / A S D F).
+    OnScreenControlsLevelKeyboard
 };
 
 - (id) initWithView:(UIView*)view controllerSup:(ControllerSupport*)controllerSupport streamConfig:(StreamConfiguration*)streamConfig;

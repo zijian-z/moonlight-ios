@@ -9,6 +9,7 @@
 #import "SettingsViewController.h"
 #import "TemporarySettings.h"
 #import "DataManager.h"
+#import "OSCPreviewViewController.h"
 
 #import <VideoToolbox/VideoToolbox.h>
 #import <AVFoundation/AVFoundation.h>
@@ -16,6 +17,7 @@
 @implementation SettingsViewController {
     NSInteger _bitrate;
     NSInteger _lastSelectedResolutionIndex;
+    UIButton* _previewOSCButton;
 }
 
 @dynamic overrideUserInterfaceStyle;
@@ -70,6 +72,11 @@ CGSize resolutionTable[RESOLUTION_TABLE_SIZE];
 // This view is rooted at a ScrollView. To make it scrollable,
 // we'll update content size here.
 -(void)viewDidLayoutSubviews {
+    // Lazily create the "Preview Keyboard Controls" button the first time we lay out.
+    if (_previewOSCButton == nil) {
+        [self setupPreviewOSCButton];
+    }
+
     CGFloat highestViewY = 0;
     
     // Enumerate the scroll view's subviews looking for the
@@ -90,10 +97,76 @@ CGSize resolutionTable[RESOLUTION_TABLE_SIZE];
             highestViewY = currentViewY;
         }
     }
-    
+
+    // Place the "Preview" button at the very bottom, below all settings,
+    // aligned with the on-screen-controls selector.
+    CGFloat x = self.onscreenControlSelector.frame.origin.x;
+    CGFloat w = self.onscreenControlSelector.frame.size.width;
+    if (w < 100) {
+        // Fallback if the selector hasn't been laid out yet
+        w = MIN(self.scrollView.frame.size.width - 2 * x, 320);
+    }
+    _previewOSCButton.frame = CGRectMake(x, highestViewY + 28, w, 44);
+    [self updatePreviewButtonState];
+
+    // Include the button in the scrollable content.
+    highestViewY = CGRectGetMaxY(_previewOSCButton.frame);
+
     // Add a bit of padding so the view doesn't end right at the button of the display
     self.scrollView.contentSize = CGSizeMake(self.scrollView.contentSize.width,
                                              highestViewY + 20);
+}
+
+// Enables/highlights the preview button only when the "Keyboard" on-screen
+// controls option is selected; otherwise greys it out and disables it.
+- (void)updatePreviewButtonState {
+    if (_previewOSCButton == nil) {
+        return;
+    }
+    BOOL keyboardSelected = (self.onscreenControlSelector.selectedSegmentIndex == 4)
+                            && self.onscreenControlSelector.isEnabled;
+    _previewOSCButton.enabled = keyboardSelected;
+    _previewOSCButton.backgroundColor = keyboardSelected
+        ? [UIColor colorWithRed:0.16 green:0.46 blue:0.92 alpha:1.0]
+        : [UIColor colorWithWhite:0.45 alpha:0.5];
+}
+
+- (void)setupPreviewOSCButton {
+    _previewOSCButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [_previewOSCButton setTitle:@"Preview Keyboard Controls" forState:UIControlStateNormal];
+    [_previewOSCButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    _previewOSCButton.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    _previewOSCButton.backgroundColor = [UIColor colorWithWhite:0.45 alpha:0.5];
+    _previewOSCButton.layer.cornerRadius = 10;
+    _previewOSCButton.clipsToBounds = YES;
+    [_previewOSCButton addTarget:self
+                          action:@selector(previewOnScreenControlsTapped)
+                forControlEvents:UIControlEventTouchUpInside];
+    [self.scrollView addSubview:_previewOSCButton];
+}
+
+- (void)previewOnScreenControlsTapped {
+    [OSCPreviewViewController presentFrom:self];
+}
+
+// The on-screen-controls picker shows Off/Auto/Simple/Full plus our custom
+// "Keyboard" entry as the 5th segment. The stored level for Keyboard is its
+// enum value (7), so map between segment index and stored level here.
+- (NSInteger)segmentIndexForLevel:(NSInteger)level {
+    if (level == OnScreenControlsLevelKeyboard) {
+        return 4;
+    }
+    if (level >= 0 && level <= 3) {
+        return level;
+    }
+    return 0; // internal/auto-gamepad levels fall back to Off in the picker
+}
+
+- (NSInteger)levelForSegmentIndex:(NSInteger)idx {
+    if (idx == 4) {
+        return OnScreenControlsLevelKeyboard;
+    }
+    return idx; // 0..3 map directly
 }
 
 // Adjust the subviews for the safe area on the iPhone X.
@@ -255,8 +328,15 @@ BOOL isCustomResolution(CGSize res) {
     [self.resolutionSelector addTarget:self action:@selector(newResolutionChosen) forControlEvents:UIControlEventValueChanged];
     [self.framerateSelector setSelectedSegmentIndex:framerate];
     [self.framerateSelector addTarget:self action:@selector(updateBitrate) forControlEvents:UIControlEventValueChanged];
-    [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
+    // Add our custom "Keyboard" mapping option (5th segment) if not present.
+    if (self.onscreenControlSelector.numberOfSegments < 5) {
+        [self.onscreenControlSelector insertSegmentWithTitle:@"Keyboard"
+                                                     atIndex:self.onscreenControlSelector.numberOfSegments
+                                                    animated:NO];
+    }
+    [self.onscreenControlSelector setSelectedSegmentIndex:[self segmentIndexForLevel:onscreenControls]];
     [self.onscreenControlSelector setEnabled:!currentSettings.absoluteTouchMode];
+    [self.onscreenControlSelector addTarget:self action:@selector(updatePreviewButtonState) forControlEvents:UIControlEventValueChanged];
     [self.bitrateSlider setMinimumValue:0];
     [self.bitrateSlider setMaximumValue:(sizeof(bitrateTable) / sizeof(*bitrateTable)) - 1];
     [self.bitrateSlider setValue:[self getSliderValueForBitrate:_bitrate] animated:YES];
@@ -268,6 +348,7 @@ BOOL isCustomResolution(CGSize res) {
 - (void) touchModeChanged {
     // Disable on-screen controls in absolute touch mode
     [self.onscreenControlSelector setEnabled:[self.touchModeSelector selectedSegmentIndex] == 0];
+    [self updatePreviewButtonState];
 }
 
 - (void) updateBitrate {
@@ -527,7 +608,7 @@ BOOL isCustomResolution(CGSize res) {
     NSInteger framerate = [self getChosenFrameRate];
     NSInteger height = [self getChosenStreamHeight];
     NSInteger width = [self getChosenStreamWidth];
-    NSInteger onscreenControls = [self.onscreenControlSelector selectedSegmentIndex];
+    NSInteger onscreenControls = [self levelForSegmentIndex:[self.onscreenControlSelector selectedSegmentIndex]];
     BOOL optimizeGames = [self.optimizeSettingsSelector selectedSegmentIndex] == 1;
     BOOL multiController = [self.multiControllerSelector selectedSegmentIndex] == 1;
     BOOL swapABXYButtons = [self.swapABXYButtonsSelector selectedSegmentIndex] == 1;

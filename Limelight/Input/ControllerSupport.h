@@ -41,6 +41,10 @@
 
 -(void) updateFinished:(Controller*)controller;
 
+// Sends a raw keyboard key event (Win32 VK code) to the host. Used by the
+// on-screen controls' keyboard-mapped buttons.
+-(void) sendKeyboardEvent:(short)keyCode down:(BOOL)down;
+
 -(void) rumble:(unsigned short)controllerNumber lowFreqMotor:(unsigned short)lowFreqMotor highFreqMotor:(unsigned short)highFreqMotor;
 -(void) rumbleTriggers:(uint16_t)controllerNumber leftTrigger:(uint16_t)leftTrigger rightTrigger:(uint16_t)rightTrigger;
 -(void) setMotionEventState:(uint16_t)controllerNumber motionType:(uint8_t)motionType reportRateHz:(uint16_t)reportRateHz;
